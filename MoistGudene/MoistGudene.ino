@@ -1,65 +1,81 @@
-    #include <SoftwareSerial.h>
-    #define SensorPin A0 
-    SoftwareSerial ESPserial(2, 3); // RX | TX
-    
-    float sensorValue = 0;
-    
-    void setup()
-    {
-      Serial.begin(9600); // communication with the host computer
-      ESPserial.begin(9600); // Start the software serial for communication with the ESP8266
-      
-      Serial.println("");
-      Serial.println("Lets get moist");
-      
-      sendAtCommand("AT+CWJAP=\"Telenor_Guest\"\,\"\"", 5000);//Connect to telenor guest
-      sendAtCommand("AT", 1000);
-
+  #include "WiFiEsp.h"
+  // Emulate Serial1 on pins 6/7 if not present
+  #ifndef HAVE_HWSERIAL1
+  #include "SoftwareSerial.h"
+  SoftwareSerial Serial1(2, 3); // RX, TX
+  #endif
+  char ssid[] = "Telenor_Guest";            // your network SSID (name)
+  char pass[] = "";        // your network password
+  int status = WL_IDLE_STATUS;     // the Wifi radio's status
+  char server[] = "arduino.cc";
+  // Initialize the Ethernet client object
+  WiFiEspClient client;
+  void setup()
+  {
+    // initialize serial for debugging
+    Serial.begin(9600);
+    // initialize serial for ESP module
+    Serial1.begin(9600);
+    // initialize ESP module
+    WiFi.init(&Serial1);
+    // check for the presence of the shield
+    if (WiFi.status() == WL_NO_SHIELD) {
+      Serial.println("WiFi shield not present");
+      // don't continue
+      while (true);
     }
-    
-    void loop()
-    {
-      
-      // listen for communication from the ESP8266 and then write it to the serial monitor
-      if ( ESPserial.available() ) 
-      { 
-        Serial.write( ESPserial.read() ); 
-      }
-      
-      // listen for user input and send it to the ESP8266
-      if ( Serial.available() ) 
-      { 
-        ESPserial.write( Serial.read() ); 
-      }
-
-      //for (int i = 0; i <= 100; i++) 
-      //{ 
-      //  sensorValue = sensorValue + analogRead(SensorPin); 
-      //  delay(1); 
-      //} 
-      //sensorValue = sensorValue/100.0; 
-      //Serial.println(sensorValue); 
-      //delay(1000); 
+    // attempt to connect to WiFi network
+    while ( status != WL_CONNECTED) {
+      Serial.print("Attempting to connect to WPA SSID: ");
+      Serial.println(ssid);
+      // Connect to WPA/WPA2 network
+      status = WiFi.begin(ssid, pass);
     }
-
-
-    
-    
-
-    String sendAtCommand(const char *toSend, unsigned long milliseconds) {
-      String result;
-      Serial.print("Sending: ");
-      Serial.println(toSend);
-      ESPserial.println(toSend);
-      unsigned long startTime = millis();
-      Serial.print("Received: ");
-      while (millis() - startTime < milliseconds) {
-        if (ESPserial.available()) {
-          char c = ESPserial.read();
-          Serial.write(c);
-          result += c;  // append to the result string
-        }
-      }
-      Serial.println();  // new line after timeout.
-      return result;
+    // you're connected now, so print out the data
+    Serial.println("You're connected to the network");
+    printWifiStatus();
+    Serial.println();
+    Serial.println("Starting connection to server...");
+    // if you get a connection, report back via serial
+    if (client.connect(server, 80)) {
+      Serial.println("Connected to server");
+      // Make a HTTP request
+      client.println("GET /asciilogo.txt HTTP/1.1");
+      client.println("Host: arduino.cc");
+      client.println("Connection: close");
+      client.println();
+      Serial.println("Request Sent");
     }
+  }
+  void loop()
+  {
+    // if there are incoming bytes available
+    // from the server, read them and print them
+    while (client.available()) {
+      char c = client.read();
+      Serial.write(c);
+    }
+    // if the server's disconnected, stop the client
+    if (!client.connected()) {
+      Serial.println();
+      Serial.println("Disconnecting from server...");
+      client.stop();
+      // do nothing forevermore
+      while (true);
+    }
+  }
+  void printWifiStatus()
+  {
+    // print the SSID of the network you're attached to
+    Serial.print("SSID: ");
+    Serial.println(WiFi.SSID());
+    // print your WiFi shield's IP address
+    IPAddress ip = WiFi.localIP();
+    Serial.print("IP Address: ");
+    Serial.println(ip);
+    // print the received signal strength
+    long rssi = WiFi.RSSI();
+    Serial.print("Signal strength (RSSI):");
+    Serial.print(rssi);
+    Serial.println(" dBm");
+  }
