@@ -1,4 +1,5 @@
   #include "WiFiEsp.h"
+  #include "PubSubClient.h"
   // Emulate Serial1 on pins 6/7 if not present
   #ifndef HAVE_HWSERIAL1
   #include "SoftwareSerial.h"
@@ -8,8 +9,16 @@
   char pass[] = "";        // your network password
   int status = WL_IDLE_STATUS;     // the Wifi radio's status
   char server[] = "arduino.cc";
+
+  const char* mqtt_broker = "SERVER_IP";
+  const char* mqtt_username = "user";
+  const char* mqtt_password = "pass";
+  const char* mqtt_topic = "test/test";
+  const int mqtt_port = 8883;
+  
   // Initialize the Ethernet client object
   WiFiEspClient client;
+  PubSubClient pubSubClient(client);
   void setup()
   {
     // initialize serial for debugging
@@ -46,6 +55,25 @@
       client.println();
       Serial.println("Request Sent");
     }
+    
+    //connecting to a mqtt broker
+    pubSubClient.setServer(mqtt_broker, mqtt_port);
+    pubSubClient.setCallback(callback);
+    while (!pubSubClient.connected()) {
+        String client_id = "esp8266-client-";
+        client_id += String(WiFi.macAddress());
+        Serial.printf("The client %s connects to the public mqtt broker\n", client_id.c_str());
+        if (pubSubClient.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
+            Serial.println("Mqtt broker connected");
+        } else {
+            Serial.print("failed with state ");
+            Serial.print(pubSubClient.state());
+            delay(2000);
+        }
+    }
+    // publish and subscribe
+    pubSubClient.publish(topic, "hello emqx");
+    pubSubClient.subscribe(topic);
   }
   void loop()
   {
@@ -64,6 +92,18 @@
       while (true);
     }
   }
+
+  void callback(char *topic, byte *payload, unsigned int length) {
+    Serial.print("Message arrived in topic: ");
+    Serial.println(topic);
+    Serial.print("Message:");
+    for (int i = 0; i < length; i++) {
+        Serial.print((char) payload[i]);
+    }
+    Serial.println();
+    Serial.println("-----------------------");
+  }
+  
   void printWifiStatus()
   {
     // print the SSID of the network you're attached to
